@@ -86,7 +86,7 @@ h2{margin:0;font-size:20px;}
 
 .segment button.active{
   background:#151515;
-  color:#eaeaea;
+  color:#fff;
 }
 
 input,button{
@@ -101,7 +101,6 @@ input,button{
 
 button{cursor:pointer;}
 button:hover{transform:translateY(-1px);}
-button.secondary{background:#0b0b0b;}
 
 .row{
   display:flex;
@@ -110,10 +109,7 @@ button.secondary{background:#0b0b0b;}
   border-bottom:1px solid #161616;
 }
 
-.income{color:#d0d0d0;}
-.expense{color:#9a9a9a;}
-
-.delete{margin-left:10px;color:#555;cursor:pointer;}
+.delete{color:#555;cursor:pointer;}
 .delete:hover{color:#aaa;}
 
 .hidden{display:none;}
@@ -124,7 +120,7 @@ button.secondary{background:#0b0b0b;}
 
 <div class="header">
   <h2>💰 Rozpočet</h2>
-  <span class="badge">FIXED RECURRENCE</span>
+  <span class="badge">FIX</span>
 </div>
 
 <div class="card">
@@ -132,22 +128,10 @@ button.secondary{background:#0b0b0b;}
 </div>
 
 <div class="card">
-  <div class="small">ROK</div>
-  <div class="segment">
-    <button onclick="changeYear(-1)">←</button>
-    <button id="yearBtn" class="active"></button>
-    <button onclick="changeYear(1)">→</button>
-  </div>
-
-  <div class="small" style="margin-top:14px;">MĚSÍC</div>
-  <div class="segment" id="monthSeg"></div>
-</div>
-
-<div class="card">
   <div class="segment">
     <button onclick="showTab('salary')" id="tabSalary" class="active">Výplata</button>
-    <button onclick="showTab('recurring')">Pravidelné</button>
-    <button onclick="showTab('transactions')">Běžné</button>
+    <button onclick="showTab('recurring')" id="tabRecurring">Pravidelné</button>
+    <button onclick="showTab('transactions')" id="tabTransactions">Běžné</button>
   </div>
 </div>
 
@@ -157,7 +141,7 @@ button.secondary{background:#0b0b0b;}
 </div>
 
 <div class="card hidden" id="recBox">
-  <input id="recName" placeholder="Název">
+  <input id="recName" placeholder="Pravidelná položka">
   <input id="recAmount" type="number" placeholder="Částka">
   <button onclick="addRecurring()">Přidat</button>
   <div id="recList"></div>
@@ -167,20 +151,23 @@ button.secondary{background:#0b0b0b;}
   <input id="note" placeholder="Poznámka">
   <input id="amount" type="number" placeholder="Částka">
 
-  <button onclick="addTransaction('expense')" class="secondary">Výdaj</button>
+  <button onclick="addTransaction('expense')">Výdaj</button>
   <button onclick="addTransaction('income')">Příjem</button>
+
+  <button onclick="clearTransactions()">Smazat vše</button>
 
   <div id="list"></div>
 </div>
 
 <script>
 
-let selectedYear = new Date().getFullYear();
+let currentYear = new Date().getFullYear();
+let selectedYear = currentYear;
 let selectedMonth = new Date().getMonth();
 
 const months = Array.from({length:12},(_,i)=>String(i+1).padStart(2,'0'));
 
-let data = JSON.parse(localStorage.getItem("data")) || [];
+let data = JSON.parse(localStorage.getItem("data")) || {};
 let recurring = JSON.parse(localStorage.getItem("recurring")) || [];
 
 function key(){
@@ -194,177 +181,123 @@ function save(){
 
 function init(){
   const k = key();
-
   if(!data[k]){
-    data[k] = {
-      transactions:[],
-      salary:0
-    };
+    data[k] = {transactions:[], salary:0};
   }
 }
 
 function calc(d){
   let t = d.salary || 0;
-
-  t += d.transactions.reduce((s,x)=>
-    s + (x.type==='income'?x.amount:-x.amount),0
-  );
-
-  // 🔥 platné recurring položky pro daný měsíc
-  recurring
-    .filter(r =>
-      (!r.created || r.created <= key()) &&
-      (!r.disabledFrom || r.disabledFrom > key())
-    )
-    .forEach(r => t -= r.amount);
-
+  t += d.transactions.reduce((s,x)=>s+(x.type==='income'?x.amount:-x.amount),0);
+  recurring.forEach(r => t -= r.amount);
   return t;
 }
 
-function showTab(tab){
-
-  document.getElementById("salaryBox").classList.add("hidden");
-  document.getElementById("recBox").classList.add("hidden");
-  document.getElementById("transBox").classList.add("hidden");
-
-  document.getElementById("tabSalary").classList.remove("active");
-
-  if(tab==="salary") document.getElementById("salaryBox").classList.remove("hidden");
-  if(tab==="recurring") document.getElementById("recBox").classList.remove("hidden");
-  if(tab==="transactions") document.getElementById("transBox").classList.remove("hidden");
-}
-
-function buildMonths(){
-  const m = document.getElementById("monthSeg");
-  m.innerHTML = "";
-
-  months.forEach((v,i)=>{
-    const b = document.createElement("button");
-    b.textContent = v;
-    if(i===selectedMonth) b.classList.add("active");
-    b.onclick=()=>{selectedMonth=i;render();};
-    m.appendChild(b);
-  });
-}
-
-function changeYear(dir){
-  selectedYear += dir;
-  render();
-}
-
 function render(){
-
   init();
-
-  const k = key();
-  const d = data[k];
+  const d = data[key()];
 
   document.getElementById("balance").innerText = calc(d);
   document.getElementById("salary").value = d.salary || "";
-  document.getElementById("yearBtn").innerText = selectedYear;
 
-  const list = document.getElementById("list");
-  list.innerHTML = "";
-
+  const list=document.getElementById("list");
+  list.innerHTML="";
   d.transactions.forEach((t,i)=>{
-    list.innerHTML += `
-      <div class='row'>
-        <span>${t.note || '—'}</span>
-        <div>
-          <span class='${t.type}'>
-            ${t.type==='income'?'+':'-'}${t.amount}
-          </span>
-          <span class='delete' onclick='delT(${i})'>✕</span>
-        </div>
-      </div>`;
+    list.innerHTML+=`
+    <div class='row'>
+      <span>${t.note||'—'}</span>
+      <div>
+        ${t.type==='income'?'+':'-'}${t.amount}
+        <span class='delete' onclick='delT(${i})'>✕</span>
+      </div>
+    </div>`;
   });
 
-  const rec = document.getElementById("recList");
-  rec.innerHTML = "";
-
-  recurring
-    .filter(r =>
-      (!r.created || r.created <= key()) &&
-      (!r.disabledFrom || r.disabledFrom > key())
-    )
-    .forEach((r,i)=>{
-      rec.innerHTML += `
-        <div class='row'>
-          <span>${r.name}</span>
-          <div>
-            <span class='expense'>-${r.amount}</span>
-            <span class='delete' onclick='delR(${i})'>✕</span>
-          </div>
-        </div>`;
-    });
-
-  buildMonths();
+  const rec=document.getElementById("recList");
+  rec.innerHTML="";
+  recurring.forEach((r,i)=>{
+    rec.innerHTML+=`
+    <div class='row'>
+      <span>${r.name}</span>
+      <div>
+        -${r.amount}
+        <span class='delete' onclick='delR(${i})'>✕</span>
+      </div>
+    </div>`;
+  });
 }
 
 function setSalary(){
-  const k = key(); init();
-  data[k].salary = parseFloat(document.getElementById("salary").value)||0;
+  data[key()].salary = parseFloat(document.getElementById("salary").value)||0;
   save(); render();
 }
 
-function addTransaction(t){
-  const k = key(); init();
-
-  const n = document.getElementById("note").value;
+function addTransaction(type){
   const a = parseFloat(document.getElementById("amount").value);
-
+  const n = document.getElementById("note").value;
   if(isNaN(a)) return;
 
-  data[k].transactions.unshift({amount:a,note:n,type:t});
-
+  data[key()].transactions.unshift({amount:a,note:n,type});
   save(); render();
 
-  document.getElementById("note").value="";
   document.getElementById("amount").value="";
+  document.getElementById("note").value="";
+}
+
+function clearTransactions(){
+  if(confirm("Opravdu smazat všechny běžné transakce?")){
+    data[key()].transactions = [];
+    save();
+    render();
+  }
 }
 
 function addRecurring(){
-
   const n = document.getElementById("recName").value;
   const a = parseFloat(document.getElementById("recAmount").value);
-
   if(!n || isNaN(a)) return;
 
-  recurring.push({
-    id: crypto.randomUUID(),
-    name:n,
-    amount:a,
-    created:key(),
-    disabledFrom:null
-  });
+  recurring.push({name:n, amount:a});
 
-  save(); render();
+  save(); 
+  render();
 
   document.getElementById("recName").value="";
   document.getElementById("recAmount").value="";
 }
 
-function delR(i){
-
-  const k = key();
-
-  const visible = recurring.filter(r =>
-    (!r.created || r.created <= k) &&
-    (!r.disabledFrom || r.disabledFrom > k)
-  );
-
-  const item = visible[i];
-
-  const real = recurring.find(r => r.id === item.id);
-
-  real.disabledFrom = k;
-
-  save(); render();
-}
-
 function delT(i){
   data[key()].transactions.splice(i,1);
   save(); render();
+}
+
+function delR(i){
+  recurring.splice(i,1);
+  save(); 
+  render();
+}
+
+function showTab(tab){
+  document.getElementById("salaryBox").classList.add("hidden");
+  document.getElementById("recBox").classList.add("hidden");
+  document.getElementById("transBox").classList.add("hidden");
+
+  document.getElementById("tabSalary").classList.remove("active");
+  document.getElementById("tabRecurring").classList.remove("active");
+  document.getElementById("tabTransactions").classList.remove("active");
+
+  if(tab==="salary"){
+    document.getElementById("salaryBox").classList.remove("hidden");
+    document.getElementById("tabSalary").classList.add("active");
+  }
+  if(tab==="recurring"){
+    document.getElementById("recBox").classList.remove("hidden");
+    document.getElementById("tabRecurring").classList.add("active");
+  }
+  if(tab==="transactions"){
+    document.getElementById("transBox").classList.remove("hidden");
+    document.getElementById("tabTransactions").classList.add("active");
+  }
 }
 
 render();
