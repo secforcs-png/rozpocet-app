@@ -130,7 +130,7 @@ button.secondary{background:#0b0b0b;}
   <div class="small">Výběr období</div>
 </div>
 
-<!-- ROK + MĚSÍC OVLÁDÁNÍ -->
+<!-- ROZHRANÍ ROK / MĚSÍC -->
 <div class="card">
 
   <div class="small">ROK</div>
@@ -157,11 +157,18 @@ button.secondary{background:#0b0b0b;}
   <div id="recList"></div>
 </div>
 
+<!-- 🔁 BĚŽNÉ TRANSAKCE (POZNÁMKA ↔ ČÁSTKA PROHOZENO) -->
 <div class="card">
-  <input id="amount" type="number" placeholder="Částka">
+
+  <!-- ZMĚNA: nejdřív poznámka -->
   <input id="note" placeholder="Poznámka">
+
+  <!-- pak částka -->
+  <input id="amount" type="number" placeholder="Částka">
+
   <button onclick="addTransaction('expense')" class="secondary">Výdaj</button>
   <button onclick="addTransaction('income')">Příjem</button>
+
   <div id="list"></div>
 </div>
 
@@ -224,6 +231,7 @@ function render(){
 
   const rec = document.getElementById("recList");
   rec.innerHTML = "";
+
   recurring.forEach((r,i)=>{
     rec.innerHTML += `
       <div class='row'>
@@ -264,16 +272,17 @@ function setSalary(){
 
 function addTransaction(t){
   const k = key(); init();
-  const a = parseFloat(document.getElementById("amount").value);
+
   const n = document.getElementById("note").value;
+  const a = parseFloat(document.getElementById("amount").value);
 
   if(isNaN(a) || a<=0) return;
 
-  data[k].transactions.unshift({amount:a,note:n,type:t});
+  data[k].transactions.unshift({amount:a, note:n, type:t});
   save(); render();
 
-  document.getElementById("amount").value="";
   document.getElementById("note").value="";
+  document.getElementById("amount").value="";
 }
 
 function addRecurring(){
