@@ -1,4 +1,4 @@
- <!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="cs">
 <head>
 <meta charset="UTF-8">
@@ -13,7 +13,6 @@
   --border:#1b1b1b;
   --text:#eaeaea;
   --muted:#8b8b8b;
-  --soft:#141414;
 }
 
 *{box-sizing:border-box}
@@ -68,7 +67,13 @@ h2{margin:0;font-size:20px;}
 
 .small{font-size:12px;color:#8b8b8b;margin-top:6px;}
 
-.segment{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
+.segment{
+  display:flex;
+  gap:6px;
+  margin-top:10px;
+  flex-wrap:wrap;
+}
+
 .segment button{
   flex:1;
   padding:10px;
@@ -78,6 +83,7 @@ h2{margin:0;font-size:20px;}
   color:#8b8b8b;
   cursor:pointer;
 }
+
 .segment button.active{
   background:#151515;
   color:#eaeaea;
@@ -95,7 +101,6 @@ input,button{
 
 button{cursor:pointer;}
 button:hover{transform:translateY(-1px);}
-
 button.secondary{background:#0b0b0b;}
 
 .row{
@@ -110,8 +115,6 @@ button.secondary{background:#0b0b0b;}
 
 .delete{margin-left:10px;color:#555;cursor:pointer;}
 .delete:hover{color:#aaa;}
-
-#swipeArea{transition:transform .25s ease;}
 </style>
 </head>
 
@@ -124,15 +127,22 @@ button.secondary{background:#0b0b0b;}
 
 <div class="card">
   <div class="balance">Zůstatek: <span id="balance">0</span> Kč</div>
-  <div class="small">Swipe ← → měsíce</div>
+  <div class="small">Výběr období</div>
 </div>
 
+<!-- ROK + MĚSÍC OVLÁDÁNÍ -->
 <div class="card">
+
   <div class="small">ROK</div>
-  <div class="segment" id="yearSeg"></div>
+  <div class="segment">
+    <button onclick="changeYear(-1)">← Rok</button>
+    <button id="yearBtn" class="active"></button>
+    <button onclick="changeYear(1)">Rok →</button>
+  </div>
 
   <div class="small" style="margin-top:14px;">MĚSÍC</div>
   <div class="segment" id="monthSeg"></div>
+
 </div>
 
 <div class="card">
@@ -147,7 +157,7 @@ button.secondary{background:#0b0b0b;}
   <div id="recList"></div>
 </div>
 
-<div class="card" id="swipeArea">
+<div class="card">
   <input id="amount" type="number" placeholder="Částka">
   <input id="note" placeholder="Poznámka">
   <button onclick="addTransaction('expense')" class="secondary">Výdaj</button>
@@ -156,17 +166,18 @@ button.secondary{background:#0b0b0b;}
 </div>
 
 <script>
-const currentYear=new Date().getFullYear();
-const years=Array.from({length:5},(_,i)=>currentYear-2+i);
-const months=Array.from({length:12},(_,i)=>String(i+1).padStart(2,'0'));
 
-let selectedYear=currentYear;
-let selectedMonth=new Date().getMonth();
+let selectedYear = new Date().getFullYear();
+let selectedMonth = new Date().getMonth();
 
-let data=JSON.parse(localStorage.getItem("data"))||{};
-let recurring=JSON.parse(localStorage.getItem("recurring"))||[];
+const months = Array.from({length:12},(_,i)=>String(i+1).padStart(2,'0'));
 
-function key(){return `${selectedYear}-${months[selectedMonth]}`;}
+let data = JSON.parse(localStorage.getItem("data")) || {};
+let recurring = JSON.parse(localStorage.getItem("recurring")) || [];
+
+function key(){
+  return `${selectedYear}-${months[selectedMonth]}`;
+}
 
 function save(){
   localStorage.setItem("data",JSON.stringify(data));
@@ -174,109 +185,122 @@ function save(){
 }
 
 function init(){
-  const k=key();
-  if(!data[k]) data[k]={transactions:[],salary:0};
+  const k = key();
+  if(!data[k]) data[k] = {transactions:[], salary:0};
 }
 
 function calc(d){
-  let t=d.salary||0;
-  t+=d.transactions.reduce((s,x)=>s+(x.type==='income'?x.amount:-x.amount),0);
-  t-=recurring.reduce((s,x)=>s+x.amount,0);
+  let t = d.salary || 0;
+  t += d.transactions.reduce((s,x)=>s+(x.type==='income'?x.amount:-x.amount),0);
+  t -= recurring.reduce((s,x)=>s+x.amount,0);
   return t;
 }
 
 function render(){
   init();
-  const k=key();
-  const d=data[k];
+  const k = key();
+  const d = data[k];
 
-  document.getElementById("balance").innerText=calc(d);
+  document.getElementById("balance").innerText = calc(d);
+  document.getElementById("salary").value = d.salary || "";
 
-  document.getElementById("salary").value=d.salary||"";
+  document.getElementById("yearBtn").innerText = selectedYear;
 
-  const list=document.getElementById("list");
-  list.innerHTML="";
+  const list = document.getElementById("list");
+  list.innerHTML = "";
 
   d.transactions.forEach((t,i)=>{
-    list.innerHTML+=`<div class='row'><span>${t.note||'—'}</span><div><span class='${t.type}'>${t.type==='income'?'+':'-'}${t.amount}</span><span class='delete' onclick='delT(${i})'>✕</span></div></div>`;
+    list.innerHTML += `
+      <div class='row'>
+        <span>${t.note || '—'}</span>
+        <div>
+          <span class='${t.type}'>
+            ${t.type==='income'?'+':'-'}${t.amount}
+          </span>
+          <span class='delete' onclick='delT(${i})'>✕</span>
+        </div>
+      </div>`;
   });
 
-  const rec=document.getElementById("recList");
-  rec.innerHTML="";
+  const rec = document.getElementById("recList");
+  rec.innerHTML = "";
   recurring.forEach((r,i)=>{
-    rec.innerHTML+=`<div class='row'><span>${r.name}</span><div><span class='expense'>-${r.amount}</span><span class='delete' onclick='delR(${i})'>✕</span></div></div>`;
+    rec.innerHTML += `
+      <div class='row'>
+        <span>${r.name}</span>
+        <div>
+          <span class='expense'>-${r.amount}</span>
+          <span class='delete' onclick='delR(${i})'>✕</span>
+        </div>
+      </div>`;
   });
 
-  buildUI();
+  buildMonths();
 }
 
-function buildUI(){
-  const y=document.getElementById("yearSeg");
-  y.innerHTML="";
-  years.forEach(v=>{
-    const b=document.createElement("button");
-    b.textContent=v;
-    if(v===selectedYear)b.classList.add("active");
-    b.onclick=()=>{selectedYear=v;render();};
-    y.appendChild(b);
-  });
+function buildMonths(){
+  const m = document.getElementById("monthSeg");
+  m.innerHTML = "";
 
-  const m=document.getElementById("monthSeg");
-  m.innerHTML="";
   months.forEach((v,i)=>{
-    const b=document.createElement("button");
-    b.textContent=v;
-    if(i===selectedMonth)b.classList.add("active");
-    b.onclick=()=>{selectedMonth=i;render();};
+    const b = document.createElement("button");
+    b.textContent = v;
+    if(i === selectedMonth) b.classList.add("active");
+    b.onclick = ()=>{ selectedMonth = i; render(); };
     m.appendChild(b);
   });
 }
 
+function changeYear(dir){
+  selectedYear += dir;
+  render();
+}
+
 function setSalary(){
-  const k=key();init();
-  data[k].salary=parseFloat(document.getElementById("salary").value)||0;
-  save();render();
+  const k = key(); init();
+  data[k].salary = parseFloat(document.getElementById("salary").value) || 0;
+  save(); render();
 }
 
 function addTransaction(t){
-  const k=key();init();
-  const a=parseFloat(document.getElementById("amount").value);
-  const n=document.getElementById("note").value;
-  if(isNaN(a)||a<=0)return;
-  data[k].transactions.unshift({amount:a,note:n,type:t});
-  save();render();
+  const k = key(); init();
+  const a = parseFloat(document.getElementById("amount").value);
+  const n = document.getElementById("note").value;
 
-  // CLEAR INPUTS AFTER SAVE
+  if(isNaN(a) || a<=0) return;
+
+  data[k].transactions.unshift({amount:a,note:n,type:t});
+  save(); render();
+
   document.getElementById("amount").value="";
   document.getElementById("note").value="";
 }
 
 function addRecurring(){
-  const n=document.getElementById("recName").value;
-  const a=parseFloat(document.getElementById("recAmount").value);
-  if(!n||isNaN(a)||a<=0)return;
-  recurring.push({name:n,amount:a});
-  save();render();
+  const n = document.getElementById("recName").value;
+  const a = parseFloat(document.getElementById("recAmount").value);
 
-  // CLEAR INPUTS AFTER SAVE
+  if(!n || isNaN(a) || a<=0) return;
+
+  recurring.push({name:n,amount:a});
+  save(); render();
+
   document.getElementById("recName").value="";
   document.getElementById("recAmount").value="";
 }
 
-function delT(i){data[key()].transactions.splice(i,1);save();render();}
-function delR(i){recurring.splice(i,1);save();render();}
+function delT(i){
+  data[key()].transactions.splice(i,1);
+  save(); render();
+}
 
-let sx=null;
-const area=document.getElementById("swipeArea");
-area.addEventListener("pointerdown",e=>sx=e.clientX);
-area.addEventListener("pointerup",e=>{
-  if(sx===null)return;
-  const dx=e.clientX-sx;sx=null;
-  if(Math.abs(dx)>60) selectedMonth=Math.max(0,Math.min(11,selectedMonth+(dx<0?1:-1)));
-  render();
-});
+function delR(i){
+  recurring.splice(i,1);
+  save(); render();
+}
 
 render();
+
 </script>
 
 </body>
