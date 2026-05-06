@@ -5,71 +5,280 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Můj Rozpočet</title>
 
-<link rel="manifest" href="manifest.json">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#050505">
-
 <style>
-body{font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial;background:#050505;color:#eaeaea;padding:16px;margin:0}
-.card{background:#0b0b0b;border:1px solid #1b1b1b;border-radius:18px;padding:14px;margin-bottom:14px}
-button,input{width:100%;padding:12px;margin-top:8px;border-radius:12px;border:1px solid #1b1b1b;background:#070707;color:#eaeaea}
-.row{display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #161616}
-.delete{color:#777;cursor:pointer}
+:root{
+  --bg:#050505;
+  --card:#0b0b0b;
+  --card2:#101010;
+  --border:#1b1b1b;
+  --text:#eaeaea;
+  --muted:#8b8b8b;
+  --soft:#141414;
+}
+
+*{box-sizing:border-box}
+
+body{
+  font-family:-apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Arial;
+  background:
+    radial-gradient(1200px 700px at 20% -10%, #161616, transparent),
+    radial-gradient(900px 600px at 90% 120%, #0f0f0f, transparent),
+    var(--bg);
+  color:var(--text);
+  margin:0;
+  padding:18px;
+}
+
+.header{
+  position:sticky;
+  top:0;
+  background:rgba(5,5,5,0.85);
+  backdrop-filter: blur(10px);
+  padding:14px 0;
+  margin-bottom:10px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+h2{margin:0;font-size:20px;}
+
+.badge{
+  font-size:11px;
+  padding:4px 10px;
+  border-radius:999px;
+  border:1px solid var(--border);
+  color:#8b8b8b;
+  background:#0a0a0a;
+}
+
+.card{
+  background:linear-gradient(180deg,var(--card),var(--card2));
+  border:1px solid var(--border);
+  border-radius:22px;
+  padding:16px;
+  margin-bottom:14px;
+  box-shadow:0 25px 60px rgba(0,0,0,0.65);
+}
+
+.balance{
+  font-size:34px;
+  font-weight:800;
+}
+
+.small{font-size:12px;color:#8b8b8b;margin-top:6px;}
+
+.segment{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
+.segment button{
+  flex:1;
+  padding:10px;
+  border-radius:12px;
+  border:1px solid var(--border);
+  background:#0a0a0a;
+  color:#8b8b8b;
+  cursor:pointer;
+}
+.segment button.active{
+  background:#151515;
+  color:#eaeaea;
+}
+
+input,button{
+  width:100%;
+  padding:12px;
+  margin-top:8px;
+  border-radius:14px;
+  border:1px solid var(--border);
+  background:#070707;
+  color:var(--text);
+}
+
+button{cursor:pointer;}
+button:hover{transform:translateY(-1px);}
+
+button.secondary{background:#0b0b0b;}
+
+.row{
+  display:flex;
+  justify-content:space-between;
+  padding:10px 0;
+  border-bottom:1px solid #161616;
+}
+
+.income{color:#d0d0d0;}
+.expense{color:#9a9a9a;}
+
+.delete{margin-left:10px;color:#555;cursor:pointer;}
+.delete:hover{color:#aaa;}
+
+#swipeArea{transition:transform .25s ease;}
 </style>
 </head>
 
 <body>
 
-<div class="card">
-<h2>💰 Rozpočet</h2>
-<div>Zůstatek: <span id="balance">0</span> Kč</div>
+<div class="header">
+  <h2>💰 Rozpočet</h2>
+  <span class="badge">BLACK EDITION</span>
 </div>
 
 <div class="card">
-<input id="amount" type="number" placeholder="Částka">
-<input id="note" placeholder="Poznámka">
-<button onclick="add()">Přidat výdaj</button>
-<div id="list"></div>
+  <div class="balance">Zůstatek: <span id="balance">0</span> Kč</div>
+  <div class="small">Swipe ← → měsíce</div>
+</div>
+
+<div class="card">
+  <div class="small">ROK</div>
+  <div class="segment" id="yearSeg"></div>
+
+  <div class="small" style="margin-top:14px;">MĚSÍC</div>
+  <div class="segment" id="monthSeg"></div>
+</div>
+
+<div class="card">
+  <input id="salary" type="number" placeholder="Výplata">
+  <button onclick="setSalary()">Uložit výplatu</button>
+</div>
+
+<div class="card">
+  <input id="recName" placeholder="Pravidelná položka">
+  <input id="recAmount" type="number" placeholder="Částka">
+  <button onclick="addRecurring()">Přidat</button>
+  <div id="recList"></div>
+</div>
+
+<div class="card" id="swipeArea">
+  <input id="amount" type="number" placeholder="Částka">
+  <input id="note" placeholder="Poznámka">
+  <button onclick="addTransaction('expense')" class="secondary">Výdaj</button>
+  <button onclick="addTransaction('income')">Příjem</button>
+  <div id="list"></div>
 </div>
 
 <script>
-let data = JSON.parse(localStorage.getItem("data")||"[]");
+const currentYear=new Date().getFullYear();
+const years=Array.from({length:5},(_,i)=>currentYear-2+i);
+const months=Array.from({length:12},(_,i)=>String(i+1).padStart(2,'0'));
+
+let selectedYear=currentYear;
+let selectedMonth=new Date().getMonth();
+
+let data=JSON.parse(localStorage.getItem("data"))||{};
+let recurring=JSON.parse(localStorage.getItem("recurring"))||[];
+
+function key(){return `${selectedYear}-${months[selectedMonth]}`;}
 
 function save(){
-localStorage.setItem("data",JSON.stringify(data));
+  localStorage.setItem("data",JSON.stringify(data));
+  localStorage.setItem("recurring",JSON.stringify(recurring));
+}
+
+function init(){
+  const k=key();
+  if(!data[k]) data[k]={transactions:[],salary:0};
+}
+
+function calc(d){
+  let t=d.salary||0;
+  t+=d.transactions.reduce((s,x)=>s+(x.type==='income'?x.amount:-x.amount),0);
+  t-=recurring.reduce((s,x)=>s+x.amount,0);
+  return t;
 }
 
 function render(){
-let list=document.getElementById("list");
-list.innerHTML="";
-let sum=0;
+  init();
+  const k=key();
+  const d=data[k];
 
-data.forEach((t,i)=>{
-sum-=t.amount;
-list.innerHTML+=`<div class='row'><span>${t.note}</span><span>- ${t.amount} <span class='delete' onclick='del(${i})'>✕</span></span></div>`;
+  document.getElementById("balance").innerText=calc(d);
+
+  document.getElementById("salary").value=d.salary||"";
+
+  const list=document.getElementById("list");
+  list.innerHTML="";
+
+  d.transactions.forEach((t,i)=>{
+    list.innerHTML+=`<div class='row'><span>${t.note||'—'}</span><div><span class='${t.type}'>${t.type==='income'?'+':'-'}${t.amount}</span><span class='delete' onclick='delT(${i})'>✕</span></div></div>`;
+  });
+
+  const rec=document.getElementById("recList");
+  rec.innerHTML="";
+  recurring.forEach((r,i)=>{
+    rec.innerHTML+=`<div class='row'><span>${r.name}</span><div><span class='expense'>-${r.amount}</span><span class='delete' onclick='delR(${i})'>✕</span></div></div>`;
+  });
+
+  buildUI();
+}
+
+function buildUI(){
+  const y=document.getElementById("yearSeg");
+  y.innerHTML="";
+  years.forEach(v=>{
+    const b=document.createElement("button");
+    b.textContent=v;
+    if(v===selectedYear)b.classList.add("active");
+    b.onclick=()=>{selectedYear=v;render();};
+    y.appendChild(b);
+  });
+
+  const m=document.getElementById("monthSeg");
+  m.innerHTML="";
+  months.forEach((v,i)=>{
+    const b=document.createElement("button");
+    b.textContent=v;
+    if(i===selectedMonth)b.classList.add("active");
+    b.onclick=()=>{selectedMonth=i;render();};
+    m.appendChild(b);
+  });
+}
+
+function setSalary(){
+  const k=key();init();
+  data[k].salary=parseFloat(document.getElementById("salary").value)||0;
+  save();render();
+}
+
+function addTransaction(t){
+  const k=key();init();
+  const a=parseFloat(document.getElementById("amount").value);
+  const n=document.getElementById("note").value;
+  if(isNaN(a)||a<=0)return;
+  data[k].transactions.unshift({amount:a,note:n,type:t});
+  save();render();
+
+  // CLEAR INPUTS AFTER SAVE
+  document.getElementById("amount").value="";
+  document.getElementById("note").value="";
+}
+
+function addRecurring(){
+  const n=document.getElementById("recName").value;
+  const a=parseFloat(document.getElementById("recAmount").value);
+  if(!n||isNaN(a)||a<=0)return;
+  recurring.push({name:n,amount:a});
+  save();render();
+
+  // CLEAR INPUTS AFTER SAVE
+  document.getElementById("recName").value="";
+  document.getElementById("recAmount").value="";
+}
+
+function delT(i){data[key()].transactions.splice(i,1);save();render();}
+function delR(i){recurring.splice(i,1);save();render();}
+
+let sx=null;
+const area=document.getElementById("swipeArea");
+area.addEventListener("pointerdown",e=>sx=e.clientX);
+area.addEventListener("pointerup",e=>{
+  if(sx===null)return;
+  const dx=e.clientX-sx;sx=null;
+  if(Math.abs(dx)>60) selectedMonth=Math.max(0,Math.min(11,selectedMonth+(dx<0?1:-1)));
+  render();
 });
-
-document.getElementById("balance").innerText=sum;
-}
-
-function add(){
-let a=parseFloat(document.getElementById("amount").value);
-let n=document.getElementById("note").value;
-if(!a)return;
-data.unshift({amount:a,note:n});
-save();render();
-document.getElementById("amount").value="";
-document.getElementById("note").value="";
-}
-
-function del(i){
-data.splice(i,1);
-save();render();
-}
 
 render();
 </script>
 
 </body>
 </html>
+
