@@ -113,6 +113,12 @@ button:hover{transform:translateY(-1px);}
 .delete:hover{color:#aaa;}
 
 .hidden{display:none;}
+
+.warning{
+  color:#e0a458;
+  font-size:12px;
+  margin-top:8px;
+}
 </style>
 </head>
 
@@ -159,50 +165,67 @@ button:hover{transform:translateY(-1px);}
   <div id="list"></div>
 </div>
 
+<div id="storageWarning" class="warning hidden">
+  ⚠️ Uložení se nezdařilo. Zkontrolujte, zda prohlížeč nemá zaplněné nebo zakázané úložiště (např. soukromý režim).
+</div>
+
 <script>
 
-let currentYear = new Date().getFullYear();
-let selectedYear = currentYear;
-let selectedMonth = new Date().getMonth();
+// Jediný, trvalý stav aplikace – žádné dělení podle měsíce/roku.
+let data = loadJSON("data", {transactions: [], salary: 0});
+let recurring = loadJSON("recurring", []);
 
-const months = Array.from({length:12},(_,i)=>String(i+1).padStart(2,'0'));
-
-let data = JSON.parse(localStorage.getItem("data")) || {};
-let recurring = JSON.parse(localStorage.getItem("recurring")) || [];
-
-function key(){
-  return `${selectedYear}-${months[selectedMonth]}`;
+// Migrace ze starého formátu (data uložená po měsících, např. "2026-06").
+if(!Array.isArray(data.transactions)){
+  const merged = {transactions: [], salary: 0};
+  Object.keys(data).forEach(k=>{
+    const month = data[k];
+    if(month && Array.isArray(month.transactions)){
+      merged.transactions.push(...month.transactions);
+      merged.salary = month.salary || merged.salary;
+    }
+  });
+  data = merged;
+  save();
 }
 
-function save(){
-  localStorage.setItem("data",JSON.stringify(data));
-  localStorage.setItem("recurring",JSON.stringify(recurring));
-}
-
-function init(){
-  const k = key();
-  if(!data[k]){
-    data[k] = {transactions:[], salary:0};
+function loadJSON(key, fallback){
+  try{
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  }catch(e){
+    console.error("Chyba při čtení z úložiště:", e);
+    return fallback;
   }
 }
 
-function calc(d){
-  let t = d.salary || 0;
-  t += d.transactions.reduce((s,x)=>s+(x.type==='income'?x.amount:-x.amount),0);
+function save(){
+  try{
+    localStorage.setItem("data", JSON.stringify(data));
+    localStorage.setItem("recurring", JSON.stringify(recurring));
+    document.getElementById("storageWarning").classList.add("hidden");
+    return true;
+  }catch(e){
+    console.error("Chyba při ukládání:", e);
+    document.getElementById("storageWarning").classList.remove("hidden");
+    return false;
+  }
+}
+
+function calc(){
+  let t = data.salary || 0;
+  t += data.transactions.reduce((s,x)=>s+(x.type==='income'?x.amount:-x.amount),0);
   recurring.forEach(r => t -= r.amount);
   return t;
 }
 
 function render(){
-  init();
-  const d = data[key()];
-
-  document.getElementById("balance").innerText = calc(d);
-  document.getElementById("salary").value = d.salary || "";
+  document.getElementById("balance").innerText = calc();
+  document.getElementById("salary").value = data.salary || "";
 
   const list=document.getElementById("list");
   list.innerHTML="";
-  d.transactions.forEach((t,i)=>{
+  data.transactions.forEach((t,i)=>{
     list.innerHTML+=`
     <div class='row'>
       <span>${t.note||'—'}</span>
@@ -228,7 +251,7 @@ function render(){
 }
 
 function setSalary(){
-  data[key()].salary = parseFloat(document.getElementById("salary").value)||0;
+  data.salary = parseFloat(document.getElementById("salary").value)||0;
   save(); render();
 }
 
@@ -237,7 +260,7 @@ function addTransaction(type){
   const n = document.getElementById("note").value;
   if(isNaN(a)) return;
 
-  data[key()].transactions.unshift({amount:a,note:n,type});
+  data.transactions.unshift({amount:a,note:n,type});
   save(); render();
 
   document.getElementById("amount").value="";
@@ -246,7 +269,7 @@ function addTransaction(type){
 
 function clearTransactions(){
   if(confirm("Opravdu smazat všechny běžné transakce?")){
-    data[key()].transactions = [];
+    data.transactions = [];
     save();
     render();
   }
@@ -267,7 +290,7 @@ function addRecurring(){
 }
 
 function delT(i){
-  data[key()].transactions.splice(i,1);
+  data.transactions.splice(i,1);
   save(); render();
 }
 
